@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Icon } from '@iconify/react'
+import { createBrowserClient } from '@supabase/ssr'
 import * as profileData from './data'
 import SimpleBar from 'simplebar-react'
 import { Button } from '@/components/ui/button'
@@ -16,6 +17,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { supabase } from '@/lib/supabase'
 
+const supabaseBrowser = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
 const Profile = () => {
   const [loggingOut, setLoggingOut] = useState(false)
 
@@ -24,8 +30,11 @@ const Profile = () => {
     setLoggingOut(true)
 
     try {
-      // 1. Keluar dari sesi Supabase Auth (jika login sebagai admin)
-      await supabase.auth.signOut()
+      // 1. Keluar dari sesi Supabase Auth berbasis cookie SSR dan client biasa
+      await Promise.allSettled([
+        supabaseBrowser.auth.signOut(),
+        supabase.auth.signOut(),
+      ])
     } catch (err) {
       console.error('Gagal signOut Supabase:', err)
     } finally {
@@ -34,7 +43,7 @@ const Profile = () => {
         localStorage.removeItem('guru_session')
         document.cookie = 'guru_auth=; path=/; max-age=0; SameSite=Lax'
 
-        // 3. Ganti URL riwayat saat ini ke /auth/login agar tombol Back tidak kembali ke dashboard
+        // 3. Arahkan ke /auth/login
         window.location.replace('/auth/login')
       }
     }
