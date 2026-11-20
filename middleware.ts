@@ -8,6 +8,22 @@ export async function middleware(request: NextRequest) {
     },
   });
 
+  const url = request.nextUrl.clone();
+  const path = url.pathname;
+
+  // 1. Lewatkan file statis, gambar, manifest, dan service worker agar tidak kena redirect login
+  if (
+    path.startsWith('/_next') ||
+    path.startsWith('/images') ||
+    path === '/favicon.ico' ||
+    path === '/manifest.json' ||
+    path === '/manifest.webmanifest' ||
+    path === '/sw.js' ||
+    /\.(png|jpg|jpeg|webp|gif|svg|ico|woff2?|ttf|css|js|map)$/i.test(path)
+  ) {
+    return response;
+  }
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -27,16 +43,14 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Ambil sesi user
-  const { data: { session } } = await supabase.auth.getSession();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
   const isGuruLoggedIn = request.cookies.get('guru_auth')?.value === '1';
   const hasAnySession = Boolean(session) || isGuruLoggedIn;
 
-  const url = request.nextUrl.clone();
-  const path = url.pathname;
-
-  // 1. Izinkan akses ke halaman /auth/login dan webhook /api/telegram tanpa login
+  // 2. Izinkan akses ke halaman /auth/login dan webhook /api/telegram tanpa login
   if (path.startsWith('/auth/login') || path.startsWith('/api/telegram')) {
     if (hasAnySession && path.startsWith('/auth/login')) {
       url.pathname =
@@ -46,12 +60,13 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
+  // 3. Jika sesi guru aktif (dan tidak ada sesi Supabase Auth), arahkan ke dashboard guru
   if (isGuruLoggedIn && !session && !path.startsWith('/DashboardGuru')) {
     url.pathname = '/DashboardGuru/akun-guru/dashboard';
     return NextResponse.redirect(url);
   }
 
-  // 2. Jika BELUM LOGIN dan mencoba membuka halaman lain (dashboard, dll), tendang ke /auth/login
+  // 4. Jika belum login sama sekali, arahkan ke /auth/login
   if (!hasAnySession) {
     url.pathname = '/auth/login';
     return NextResponse.redirect(url);
@@ -62,9 +77,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Matcher untuk semua rute kecuali file statis, manifest, icons, dan api telegram
-     */
-    '/((?!_next/static|_next/image|favicon.ico|manifest.json|icons/).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.json|manifest.webmanifest|sw.js|images/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?|ttf|css|js|map)$).*)',
   ],
 };

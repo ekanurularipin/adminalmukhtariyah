@@ -2,12 +2,18 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { createBrowserClient } from '@supabase/ssr'
 import LoginLogo from '@/app/(DashboardLayout)/layout/shared/logo/loginlogo'
 import CardBox from '../shared/CardBox'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { supabase } from '@/lib/supabase'
+
+const supabaseBrowser = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 export const Login = () => {
   const router = useRouter()
@@ -27,17 +33,15 @@ export const Login = () => {
       const { data: guruData, error: guruErr } = await supabase
         .from('guru_mts')
         .select('*')
-        .eq('email', email)
+        .eq('email', email.trim())
         .maybeSingle()
 
-      if (guruData) {
-        if (guruErr) {
-          throw guruErr
-        }
+      if (guruErr) {
+        throw guruErr
+      }
 
-        // 2. Cek apakah password teks biasa cocok
+      if (guruData) {
         if (guruData.password === password) {
-          // Simpan sesi di localStorage + cookie agar middleware & RootLayout mengenali sesi guru
           localStorage.setItem('guru_session', JSON.stringify(guruData))
           document.cookie = 'guru_auth=1; path=/; max-age=86400; SameSite=Lax'
           window.location.assign('/DashboardGuru/akun-guru/dashboard')
@@ -47,17 +51,20 @@ export const Login = () => {
         }
       }
 
-      // 3. Jika tidak ada di tabel guru_mts, coba login sebagai Admin via Supabase Auth standar
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email,
+      // 2. Jika bukan guru, login sebagai Admin via Supabase Auth (cookie-based SSR client)
+      const { data, error: authError } = await supabaseBrowser.auth.signInWithPassword({
+        email: email.trim(),
         password,
       })
 
       if (authError) throw authError
 
-      router.replace('/')
-      router.refresh()
+      if (data.session) {
+        window.location.assign('/')
+        return
+      }
 
+      throw new Error('Sesi login tidak ditemukan.')
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Terjadi kesalahan saat login.'
       setError(message === 'Invalid login credentials' ? 'Email atau password salah.' : message)
@@ -74,7 +81,7 @@ export const Login = () => {
             <LoginLogo />
           </div>
 
-          <h1 className=" text-center">
+          <h1 className="text-center">
             Assalamualaikum
           </h1>
 
