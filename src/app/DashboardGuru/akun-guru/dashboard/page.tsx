@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 import { useRouter } from 'next/navigation';
 import { Html5Qrcode } from 'html5-qrcode';
 import {
@@ -25,7 +26,12 @@ import {
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
-const supabase = createClient(supabaseUrl, supabaseKey);
+// const supabase = createClient(supabaseUrl, supabaseKey);
+
+const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 const getNamaHariIndonesia = (dateStr: string): string => {
   if (!dateStr) return '';
@@ -705,11 +711,19 @@ export default function PortalDashboardGuru() {
 
   const keluarAkunGuru = async () => {
     await stopQrScanner();
-    localStorage.removeItem('guru_session');
-    document.cookie = 'guru_auth=; path=/; max-age=0';
-    await supabase.auth.signOut();
-    router.replace('/auth/login');
-    router.refresh();
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('guru_session');
+      document.cookie = 'guru_auth=; path=/; max-age=0; SameSite=Lax';
+    }
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error('Gagal signOut Supabase:', err);
+    } finally {
+      if (typeof window !== 'undefined') {
+        window.location.replace('/auth/login');
+      }
+    }
   };
 
   if (verifying) {
